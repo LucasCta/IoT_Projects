@@ -22,8 +22,9 @@ long lDj = 0;
 long lDo = 0;  
 long debounceDelay = 5;
 bool jbef = 1;
-
+unsigned long antes = 0;
 int epromPos = -4;
+int nrec = 1;
 
 const uint8_t dC[] = {SEG_A | SEG_D | SEG_E | SEG_F};
 const uint8_t dD[] = {SEG_G | SEG_B | SEG_C | SEG_D | SEG_E};
@@ -48,7 +49,11 @@ const uint8_t TAPE[] = {SEG_G | SEG_D | SEG_E | SEG_F,
                         SEG_A | SEG_B | SEG_C | SEG_G | SEG_E | SEG_F,
                         SEG_A | SEG_B | SEG_G | SEG_F | SEG_E,
                         SEG_A | SEG_D | SEG_E | SEG_F | SEG_G};
-
+                        
+const uint8_t HEAR[] = {SEG_B | SEG_C | SEG_E | SEG_F | SEG_G,
+                        SEG_A | SEG_D | SEG_E | SEG_F | SEG_G,
+                        SEG_A | SEG_B | SEG_C | SEG_G | SEG_E | SEG_F,
+                        SEG_G | SEG_C | SEG_E};
 
 const int BEET[] = {
   E,2,10,0,
@@ -81,6 +86,38 @@ const int BEET[] = {
   D,2,15,0,
   C,2,5,0,
   C,2,20,0
+};
+
+
+
+const int NIVER[] = {
+  C,2,5,0,
+  C,2,5,0,
+  D,2,10,0,
+  C,2,10,0,
+  F,2,10,0,
+  E,2,20,0,
+  C,2,5,0,
+  C,2,5,0,
+  D,2,10,0,
+  C,2,10,0,
+  G,2,10,0,
+  F,2,10,0,
+  F,2,10,0,
+  A,2,5,0,
+  A,2,5,0,
+  C,3,10,0,
+  A,2,10,0,
+  F,2,10,0,
+  E,2,10,0,
+  D,2,10,0,
+  A,2,5,1,
+  A,2,5,1,
+  A,2,10,0,
+  F,2,10,0,
+  G,2,10,0,
+  F,2,10,0,
+  F,2,20,0
 };
 
 const int BACH[] = {
@@ -136,7 +173,7 @@ const int BACH[] = {
   D,2,40,0
 };
 
-enum modes {menu,freeplay,song,recrd};
+enum modes {menu,freeplay,song,recrd,hear};
 int tmode = freeplay;
 int mode = menu;
 
@@ -163,26 +200,41 @@ void loop() {
       switch (readOctave()){
         case 0:
           int rec[200];
-          for (int i = 0; i < 200; i++) {
-            rec[i] = EEPROM.read(i);
-            Serial.print(rec[i]);
-            Serial.print(",");
-            if (i%4 == 0) { 
-              Serial.println("");
-              delay(100);
-            }
-          }
+          for (int i = 0; i < 200; i++)
+            rec[i] = EEPROM.read(i);       
           songPlay(rec,200);
           break;
         case 1:
           songPlay(BEET,120);
           break;
         case 2:
+          songPlay(NIVER,27*4);
+          break;
+        case 3:
           songPlay(BACH,200);
           break;
       } break;  
     case recrd:
       record();
+      break;
+    case hear:
+      switch (readOctave()){
+        case 0:
+          int rec[200];
+          for (int i = 0; i < 200; i++)
+            rec[i] = EEPROM.read(i);       
+          playSong(rec,200);
+          break;
+        case 1:
+          playSong(BEET,120);
+          break;
+        case 2:
+          playSong(NIVER,27*4);
+          break;
+        case 3:
+          playSong(BACH,200);
+          break;
+      } break;  
       break;
   }
 }
@@ -193,6 +245,7 @@ void menuRen() {
   if (input == C) tmode = freeplay;
   if (input == E) tmode = song;
   if (input == G) tmode = recrd; 
+  if (input == B) tmode = hear;
   switch (tmode) {
     case freeplay:
       tm.setSegments(FREE,4,0);
@@ -235,17 +288,31 @@ void menuRen() {
           jbef = j;
           lDj = millis();
         }
+      } break; 
+    case hear:
+      tm.setSegments(HEAR,4,0);
+      j = digitalRead(jb);
+      if (millis()-lDj > debounceDelay) {
+        if (j != jbef && j == LOW) {
+          jbef = j;
+          mode = hear;
+          lDj = millis();
+        }
+        if (j != jbef && j == HIGH) {
+          jbef = j;
+          lDj = millis();
+        }
       } break;  
   }
 }
 
-
 void songPlay (const int sng[], int sz) {
   tm.clear();
   for (int i = 0; i < sz; i += 4) {
+    if (sng[i] == 0 && sng[i+1] == 0 && sng[i+3] == 0 && sng[i+2] == 0) break;
     displayNote(sng[i], sng[i+1], sng[i+3]);
     int t = sng[i+2];
-    int antes = millis();
+    antes = millis();
     while (t > 0) {
       if (millis()-antes > 50) {
         if (sng[i+3]) tm.showNumberDecEx(t,0b11100000,false,2,0);
@@ -254,12 +321,47 @@ void songPlay (const int sng[], int sz) {
         if (o > 0) octave = o;
         sharp = readSharp();
         note = readNote(); 
-        if (sng[i] == note && sng[i+1] == octave && sng[i+3] == sharp){
-          if (sharp) tone(buz,stones[note]*octave, 100);
-          else tone(buz,tones[note]*octave, 100);
+        if ((sng[i] == note && sng[i+1] == octave && sng[i+3] == sharp) || 
+        (sng[i] == C && note == C2 && sng[i+1] == octave+1 && sng[i+3] == sharp) ||
+        (sng[i] == C2 && note == C && sng[i+1] == octave-1 && sng[i+3] == sharp)) {
+          if (sharp) tone(buz,stones[note]*pow(2,octave-1), 100);
+          else tone(buz,tones[note]*pow(2,octave-1), 100);
           antes = millis();
           t -= 1;
         } 
+      }
+      int j = digitalRead(jb);
+      if (millis()-lDj > debounceDelay){
+        if (j != jbef && j == LOW) {
+          jbef = j;
+          i = sz; t = 0;
+          mode = menu;
+          lDj = millis();
+        }
+        if (j != jbef && j == HIGH) {
+          jbef = j;
+          lDj = millis();
+        }
+      }
+    } tm.clear();
+  } mode = menu;
+}
+
+void playSong (const int sng[], int sz) {
+  tm.clear();
+  for (int i = 0; i < sz; i += 4) {
+    if (sng[i] == 0 && sng[i+1] == 0 && sng[i+3] == 0 && sng[i+2] == 0) break;
+    displayNote(sng[i], sng[i+1], sng[i+3]);
+    int t = sng[i+2];
+    antes = millis();
+    while (t > 0) {
+      if (millis()-antes > 50) {
+        if (sng[i+3]) tm.showNumberDecEx(t,0b11100000,false,2,0);
+        else tm.showNumberDec(t,false,2,0);
+        if (sng[i+3]) tone(buz,stones[sng[i]]*pow(2,sng[i+1]-1), 100);
+        else tone(buz,tones[sng[i]]*pow(2,sng[i+1]-1), 100);
+        antes = millis();
+        t -= 1;
       }
       int j = digitalRead(jb);
       if (millis()-lDj > debounceDelay){
@@ -301,8 +403,8 @@ void freePlay() {
         lDs = millis();
       }
     }
-    if (s) tone(buz,stones[note]*octave,100);
-    else tone(buz,tones[note]*octave,100);
+    if (s) tone(buz,stones[note]*pow(2,octave-1),100);
+    else tone(buz,tones[note]*pow(2,octave-1),100);
     if (noteBef != note) displayNote(note, octave, sharp);
     noteBef = note;
   } 
@@ -321,6 +423,12 @@ void freePlay() {
 }
 
 void record() {
+  if (nrec) {
+    for (int i = 0 ; i < 200 ; i++)
+      EEPROM.write(i, 0);
+    epromPos = -4;
+    nrec = 0;
+  }
   note = readNote();  
   if (note == -1) {
     noTone(buz);
@@ -337,6 +445,7 @@ void record() {
         EEPROM.write(epromPos+1, octave);
         EEPROM.write(epromPos+3, sharp);
         EEPROM.write(epromPos+2, 1);
+        antes = millis();
         lDo = millis();
       }
     }
@@ -350,6 +459,7 @@ void record() {
         EEPROM.write(epromPos+1, octave);
         EEPROM.write(epromPos+3, sharp);
         EEPROM.write(epromPos+2, 1); 
+        antes = millis();
         lDs = millis();
       }
     }
@@ -362,8 +472,20 @@ void record() {
       EEPROM.write(epromPos+1, octave);
       EEPROM.write(epromPos+3, sharp);
       EEPROM.write(epromPos+2, 1);
+      antes = millis();
     } else {
-      EEPROM.write(epromPos+2, EEPROM.read(epromPos+2)+1);
+      if (EEPROM.read(epromPos+2) < 40) {
+        if (millis()-antes > 50) {
+          EEPROM.write(epromPos+2, EEPROM.read(epromPos+2)+1);
+          antes = millis();
+        }
+      } else {
+        epromPos += 4;
+        EEPROM.write(epromPos, note);
+        EEPROM.write(epromPos+1, octave);
+        EEPROM.write(epromPos+3, sharp);
+        EEPROM.write(epromPos+2, 1);
+      }
     }
     noteBef = note;
   } 
@@ -372,6 +494,7 @@ void record() {
     if (j != jbef && j == LOW) {
       jbef = j;
       mode = menu;
+      nrec = 1;
       lDj = millis();
     }
     if (j != jbef && j == HIGH) {
@@ -380,7 +503,7 @@ void record() {
     }
   }
   if (epromPos == 200){
-    epromPos = 0;
+    nrec = 1;
     mode = menu;
   }
 }
