@@ -88,8 +88,6 @@ const int BEET[] = {
   C,2,20,0
 };
 
-
-
 const int NIVER[] = {
   C,2,5,0,
   C,2,5,0,
@@ -528,11 +526,11 @@ int readSharp(){
 int readNote() {
   int x = analogRead(jx);
   int y = analogRead(jy);
-  if (x > 1000) x = 2;
-  else if (x < 10) x = 0;
+  if (x > 900) x = 2;
+  else if (x < 30) x = 0;
   else x = 1;
-  if (y > 1000) y = 2;
-  else if (y < 10) y = 0;
+  if (y > 900) y = 2;
+  else if (y < 30) y = 0;
   else y = 1;
   switch (x*10 + y){
     case 12:
