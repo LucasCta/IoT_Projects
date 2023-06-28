@@ -33,9 +33,9 @@ void setup() {
 
 }
 
-void send(String dir){
+void send(char dir){
   esp_err_t result;
-  result = esp_now_send(macSlave, (uint8_t *) &dir, sizeof(dir));
+  result = esp_now_send(macSlave, (uint8_t *) &dir, sizeof(char));
   if (result == ESP_OK)
     Serial.println("Envio Sucesso - ");
   else
@@ -60,20 +60,22 @@ void loop() {
   
   switch (x*10 + y){
     case 0:
-      send("LEFT-UP");
+      send('L');
       break;
     case 1:
-      send("UP");
+      send('U');
       break;
     case 12:
-      send("RIGHT-UP");
+      send('R');
       break;
     case 11:
-      send("CENTER");
+      send('C');
       break;
     default:
-      send("REVERSE");
+      send('B');
       break;
   }
+
+  delay(200);
   
 }
